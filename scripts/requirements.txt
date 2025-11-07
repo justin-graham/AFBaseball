@@ -1,0 +1,18 @@
+# Requirements for Integrated Pitching Report Generator
+
+# Core dependencies
+selenium>=4.0.0
+pandas>=1.3.0
+requests>=2.26.0
+reportlab>=3.6.0
+Pillow>=9.0.0
+
+# Optional but recommended for high-quality SVG conversion
+cairosvg>=2.5.0
+
+# Google Drive upload
+google-auth>=2.0.0
+google-api-python-client>=2.0.0
+
+# Additional dependencies that may be needed
+lxml>=4.6.0

@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Build outputs
+.next/
+out/
+build/
+dist/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.sqlite
+*.db
+
+# Docker
+.docker/
+
+# Python
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+venv/
+env/
+
+# Secrets
+secrets/
+*.pem
+*.key
+google-sa.json
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Reports and uploads
+uploads/
+reports/
+test_reports/
+trumedia_charts/
+scouting_charts/
+
+# ChromeDriver and Selenium
+chromedriver/
+.selenium_cache/

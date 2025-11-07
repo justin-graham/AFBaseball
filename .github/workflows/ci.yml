@@ -1,0 +1,170 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-typecheck:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: app/web/package-lock.json
+
+      - name: Install Python dependencies
+        run: |
+          cd app/api
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Node.js dependencies
+        run: |
+          cd app/web
+          npm ci
+
+      - name: Lint Python code
+        run: |
+          cd app/api
+          ruff check .
+
+      - name: Type check Python code
+        run: |
+          cd app/api
+          mypy . --ignore-missing-imports
+
+      - name: Lint TypeScript code
+        run: |
+          cd app/web
+          npm run lint
+
+      - name: Type check TypeScript code
+        run: |
+          cd app/web
+          npm run typecheck
+
+  test-api:
+    name: Test API
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: baseball_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd app/api
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/baseball_test
+        run: |
+          cd app/api
+          python -m pytest
+
+  test-web:
+    name: Test Web
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: app/web/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd app/web
+          npm ci
+
+      - name: Run tests
+        run: |
+          cd app/web
+          npm test
+
+  build-docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test-api, test-web]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build API image
+        run: |
+          docker build -f app/infra/Dockerfile.api -t afbaseball-api app/api
+
+      - name: Build Web image
+        run: |
+          docker build -f app/infra/Dockerfile.web -t afbaseball-web app/web
+
+      - name: Build Flows image
+        run: |
+          docker build -f app/infra/Dockerfile.flows -t afbaseball-flows app/flows
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build-docker]
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Start services
+        run: |
+          docker compose up -d db
+          sleep 10
+
+      - name: Run E2E tests
+        run: |
+          echo "E2E tests would run here with Playwright"
+          # TODO: Implement actual E2E tests
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose down -v

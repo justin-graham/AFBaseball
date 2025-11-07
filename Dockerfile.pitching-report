@@ -1,0 +1,98 @@
+FROM python:3.11-slim
+
+# Install system dependencies including Chrome and ChromeDriver
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-driver \
+    wget \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Chrome environment variable
+ENV CHROME_PATH=/usr/bin/chromium
+ENV CHROME_DRIVER_PATH=/usr/bin/chromedriver
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements_pitching_report.txt .
+RUN pip install --no-cache-dir -r requirements_pitching_report.txt
+
+# Copy Python scripts
+COPY pitching_report_integrated.py .
+COPY trumedia_scraper.py .
+COPY AF_logo.png .
+
+# Create output directory
+RUN mkdir -p /tmp/reports
+
+# Set environment variables (can be overridden at runtime)
+ENV PYTHONUNBUFFERED=1
+ENV OUTPUT_DIR=/tmp/reports
+ENV CHROME_DEBUG_PORT=9222
+
+# Expose port for Cloud Run
+EXPOSE 8080
+
+# Create a simple wrapper script to accept HTTP requests
+RUN echo '#!/usr/bin/env python3\n\
+from flask import Flask, request, jsonify\n\
+import subprocess\n\
+import json\n\
+import os\n\
+\n\
+app = Flask(__name__)\n\
+\n\
+@app.route("/generate", methods=["POST"])\n\
+def generate_report():\n\
+    data = request.get_json()\n\
+    player_name = data.get("playerName")\n\
+    player_id = data.get("playerId")\n\
+    season = data.get("season")\n\
+    start_date = data.get("startDate")\n\
+    end_date = data.get("endDate")\n\
+    \n\
+    if not all([player_name, player_id, season, start_date, end_date]):\n\
+        return jsonify({"error": "Missing required parameters"}), 400\n\
+    \n\
+    cmd = [\n\
+        "python3", "pitching_report_integrated.py",\n\
+        "--player-name", player_name,\n\
+        "--player-id", str(player_id),\n\
+        "--season", str(season),\n\
+        "--start-date", start_date,\n\
+        "--end-date", end_date,\n\
+        "--output-dir", os.getenv("OUTPUT_DIR", "/tmp/reports")\n\
+    ]\n\
+    \n\
+    try:\n\
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)\n\
+        output = result.stdout\n\
+        \n\
+        # Extract JSON result\n\
+        if "__RESULT_JSON__:" in output:\n\
+            json_str = output.split("__RESULT_JSON__:")[1].split(":__END_RESULT__")[0]\n\
+            result_data = json.loads(json_str)\n\
+            return jsonify(result_data)\n\
+        else:\n\
+            return jsonify({"error": "No result returned", "output": output}), 500\n\
+    except subprocess.TimeoutExpired:\n\
+        return jsonify({"error": "Report generation timed out"}), 504\n\
+    except Exception as e:\n\
+        return jsonify({"error": str(e)}), 500\n\
+\n\
+@app.route("/health", methods=["GET"])\n\
+def health():\n\
+    return jsonify({"status": "healthy"})\n\
+\n\
+if __name__ == "__main__":\n\
+    port = int(os.getenv("PORT", "8080"))\n\
+    app.run(host="0.0.0.0", port=port)\n\
+' > /app/server.py && chmod +x /app/server.py
+
+# Install Flask
+RUN pip install --no-cache-dir flask
+
+# Run the server
+CMD ["python3", "/app/server.py"]
